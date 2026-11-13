@@ -44,6 +44,19 @@ Load an unpacked build:
 - Chrome or Edge: open `chrome://extensions`, turn on developer mode, select **Load unpacked**, and choose `.output/chrome-mv3`.
 - Firefox: open `about:debugging#/runtime/this-firefox`, select **Load Temporary Add-on**, and choose `.output/firefox-mv3/manifest.json`.
 
+## Releases
+
+GitHub Actions run the typecheck and both builds on every push to `main` and on pull requests (`.github/workflows/ci.yml`).
+
+To publish a release, raise the version and push its tag:
+
+```bash
+npm version patch   # or minor / major: updates package.json and creates the tag
+git push --follow-tags
+```
+
+The tag (`vX.Y.Z`) must match `version` in `package.json`. `.github/workflows/release.yml` then creates a GitHub release with the Chromium, Firefox and sources zips, and the release notes. A tag with a suffix, such as `v0.2.0-beta.1`, publishes a pre-release. To repeat a release for an existing tag, run the workflow manually and enter the tag.
+
 ## Structure
 
 ```
