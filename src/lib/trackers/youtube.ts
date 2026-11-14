@@ -1,3 +1,4 @@
+import { looksJapanese } from '../japanese';
 import { TrackerCore } from './core';
 import { PlaybackMeter } from './playback';
 
@@ -23,6 +24,34 @@ function readChannel(): string | undefined {
   return link?.innerText.trim() || undefined;
 }
 
+function readDescription(): string {
+  const element = document.querySelector<HTMLElement>(
+    'ytd-watch-metadata #description-inline-expander, ytd-watch-metadata #description, #description-inline-expander',
+  );
+  return element?.innerText.slice(0, 600) ?? '';
+}
+
+/** Language data from youtube-main.content.ts. */
+interface LanguageInfo {
+  videoId: string;
+  asr: string | null;
+  audioDefault: string | null;
+  captions: string[];
+}
+
+/**
+ * Decide whether the video is in Japanese.
+ * Automatic captions and the default audio track give the spoken language.
+ * Without them, Japanese text in the title, channel or description counts.
+ */
+function japaneseVerdict(info: LanguageInfo | undefined, text: string): boolean | undefined {
+  if (info?.asr) return info.asr.startsWith('ja');
+  if (info?.audioDefault) return info.audioDefault.startsWith('ja');
+  if (looksJapanese(text)) return true;
+  if (info?.captions.some((language) => language.startsWith('ja'))) return true;
+  return info ? false : undefined;
+}
+
 function findPlayerVideo(): HTMLVideoElement | null {
   return (
     document.querySelector<HTMLVideoElement>('#movie_player video.html5-main-video') ??
@@ -40,34 +69,47 @@ export function startYouTubeTracker() {
   const core = new TrackerCore('youtube');
   const meter = new PlaybackMeter(core, () => !adShowing());
   let currentId: string | null = null;
+  const languages = new Map<string, LanguageInfo>();
 
-  const refresh = () => {
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== location.origin) return;
+    const data = event.data as (LanguageInfo & { source?: string }) | null;
+    if (data?.source !== 'ntx-yt-language' || typeof data.videoId !== 'string') return;
+    languages.set(data.videoId, {
+      videoId: data.videoId,
+      asr: typeof data.asr === 'string' ? data.asr : null,
+      audioDefault: typeof data.audioDefault === 'string' ? data.audioDefault : null,
+      captions: Array.isArray(data.captions) ? data.captions.filter((item) => typeof item === 'string') : [],
+    });
+    refresh();
+  });
+
+  const identityFor = (videoId: string) => {
+    const title = readTitle();
+    const channelName = readChannel();
+    return {
+      key: videoId,
+      title,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      japanese: japaneseVerdict(languages.get(videoId), `${title}
+${channelName ?? ''}
+${readDescription()}`),
+      meta: { videoId, channelName },
+    };
+  };
+
+  function refresh() {
     const url = new URL(location.href);
     const videoId = readVideoId(url);
     if (videoId !== currentId) {
       currentId = videoId;
-      core.setIdentity(
-        videoId
-          ? {
-              key: videoId,
-              title: readTitle(),
-              url: `https://www.youtube.com/watch?v=${videoId}`,
-              meta: { videoId, channelName: readChannel() },
-            }
-          : null,
-      );
-    } else if (videoId) {
-      // The title and channel appear after navigation, so refresh them later.
-      core.setIdentity({
-        key: videoId,
-        title: readTitle(),
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        meta: { videoId, channelName: readChannel() },
-      });
+      if (videoId) window.postMessage({ source: 'ntx-yt-language-request' }, location.origin);
     }
+    // The title, channel and language appear after navigation, so read them again on each pass.
+    core.setIdentity(videoId ? identityFor(videoId) : null);
     meter.attach(videoId ? findPlayerVideo() : null);
     if (videoId) meter.updateState();
-  };
+  }
 
   document.addEventListener('yt-navigate-finish', refresh);
   window.addEventListener('popstate', refresh);

@@ -1,3 +1,4 @@
+import { looksJapanese } from '../japanese';
 import { TrackerCore } from './core';
 import { PlaybackMeter } from './playback';
 
@@ -19,6 +20,32 @@ function pickVideo(): HTMLVideoElement | null {
   return pool.sort((a, b) => videoArea(b) - videoArea(a))[0] ?? null;
 }
 
+function hasJapaneseTrack(video: HTMLVideoElement): boolean {
+  const audio = (video as HTMLVideoElement & { audioTracks?: ArrayLike<{ language: string; enabled: boolean }> })
+    .audioTracks;
+  if (audio) {
+    for (let index = 0; index < audio.length; index += 1) {
+      const track = audio[index];
+      if (track?.enabled && track.language.startsWith('ja')) return true;
+    }
+  }
+  for (const track of video.textTracks) {
+    if (track.mode !== 'disabled' && track.language.startsWith('ja')) return true;
+  }
+  return false;
+}
+
+/**
+ * Look for signs of Japanese content in this frame.
+ * Return undefined without a sign. The background also checks the tab title.
+ */
+function japaneseVerdict(video: HTMLVideoElement | null): boolean | undefined {
+  if (document.documentElement.lang.toLowerCase().startsWith('ja')) return true;
+  if (looksJapanese(document.title)) return true;
+  if (video && hasJapaneseTrack(video)) return true;
+  return undefined;
+}
+
 /**
  * Track the main video of a page or frame.
  * The background replaces the key and title with the tab URL and title.
@@ -30,11 +57,12 @@ export function startGenericVideoTracker() {
 
   const refresh = () => {
     const video = pickVideo();
-    if (video && meter.element !== video) {
+    if (video) {
       core.setIdentity({
         key: frameKey,
         title: document.title,
         url: location.href,
+        japanese: japaneseVerdict(video),
         meta: { site: location.hostname },
       });
     }

@@ -38,6 +38,8 @@ export interface TrackerReport {
   /** True when the user paused the tracker manually. */
   manualPause?: boolean;
   warning?: 'counter-hidden';
+  /** The tracker verdict: true for Japanese content. Undefined while it is unknown. */
+  japanese?: boolean;
   meta?: SessionMeta;
 }
 
@@ -114,6 +116,10 @@ export interface Settings {
   trackReaders: boolean;
   videoSites: string[];
   privateByDefault: boolean;
+  /** Track only content that looks Japanese. */
+  onlyJapanese: boolean;
+  /** Sites where all content counts as Japanese, as host names. */
+  trustedSites: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -128,6 +134,8 @@ export const DEFAULT_SETTINGS: Settings = {
   trackReaders: true,
   videoSites: [],
   privateByDefault: false,
+  onlyJapanese: true,
+  trustedSites: [],
 };
 
 export interface NtUser {

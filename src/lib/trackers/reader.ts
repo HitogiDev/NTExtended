@@ -1,3 +1,4 @@
+import { countKana, PAGE_MIN_KANA } from '../japanese';
 import type { SourceKind } from '../types';
 import { ActivityWindow, TrackerCore } from './core';
 
@@ -56,6 +57,22 @@ function cleanBookTitle(title: string): string {
   );
 }
 
+/** Read the first text of the book without reading the whole book into one string. */
+function sampleBookText(limit = 4_000): string {
+  const root = document.querySelector('.book-content') ?? document.body;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = '';
+  while (text.length < limit && walker.nextNode()) text += walker.currentNode.nodeValue ?? '';
+  return text;
+}
+
+/** Yatsu also reads Chinese and Korean books. Only books with kana count as Japanese. */
+function bookIsJapanese(): boolean | undefined {
+  const sample = sampleBookText();
+  if (sample.trim().length < 200) return undefined;
+  return countKana(sample) >= PAGE_MIN_KANA;
+}
+
 function isBookPage(source: SourceKind): boolean {
   if (source === 'ttsu') return location.pathname.startsWith('/b');
   // The Yatsu routes are not verified. A visible counter marks a book page.
@@ -71,6 +88,7 @@ export function startReaderTracker(source: Extract<SourceKind, 'ttsu' | 'yatsu'>
   let lastPosition: number | null = null;
   let jumpedChars = 0;
   let missingCounterChecks = 0;
+  let japanese: boolean | undefined;
 
   const resetBook = (key: string | null, title: string, position: number) => {
     bookKey = key;
@@ -78,8 +96,9 @@ export function startReaderTracker(source: Extract<SourceKind, 'ttsu' | 'yatsu'>
     maxPosition = position;
     lastPosition = position;
     jumpedChars = 0;
+    japanese = key ? bookIsJapanese() : undefined;
     core.setIdentity(
-      key ? { key, title, url: location.href, meta: { readerPosition: position } } : null,
+      key ? { key, title, url: location.href, japanese, meta: { readerPosition: position } } : null,
     );
   };
 
@@ -110,10 +129,13 @@ export function startReaderTracker(source: Extract<SourceKind, 'ttsu' | 'yatsu'>
     lastPosition = counter.position;
     if (counter.position - jumpedChars > maxPosition) maxPosition = counter.position - jumpedChars;
     core.setChars(maxPosition - startPosition);
+    // The book text can load after the counter, so try again until the verdict is known.
+    if (japanese === undefined) japanese = bookIsJapanese();
     core.setIdentity({
       key,
       title,
       url: location.href,
+      japanese,
       meta: { readerPosition: counter.position, readerTotal: counter.total },
     });
   };

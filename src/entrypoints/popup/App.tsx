@@ -10,6 +10,7 @@ import { ArticleStarter } from '@/ui/ArticleStarter';
 import { formatNumber, useAppliedTheme, useSettings, useStore, useTranslator } from '@/ui/hooks';
 import { Queue } from '@/ui/Queue';
 import { SessionCard } from '@/ui/SessionCard';
+import { SkippedCard } from '@/ui/SkippedCard';
 import { UserAvatar } from '@/ui/UserAvatar';
 
 function openOptions() {
@@ -158,6 +159,7 @@ export function App() {
   const [settings, settingsLoaded] = useSettings();
   const [sessions] = useStore('sessions', []);
   const [drafts] = useStore('drafts', []);
+  const [skipped] = useStore('skipped', []);
   const serverUrl = normalizeServerUrl(settings.serverUrl);
   const connected = Boolean(settings.apiKey);
 
@@ -184,6 +186,7 @@ export function App() {
             ))}
           </ul>
         )}
+        <SkippedCard items={skipped} t={t} />
         <ArticleStarter
           t={t}
           hasSessionInTab={(tabId) =>

@@ -2,6 +2,16 @@ import { browser } from 'wxt/browser';
 import type { Settings } from './types';
 
 const en = {
+  'skipped.title': 'Not tracked: no Japanese detected',
+  'skipped.trackAnyway': 'Track anyway',
+  'skipped.trustSite': 'Always on {host}',
+  'skipped.dismiss': 'Hide',
+  'article.notJapanese': 'This page has almost no Japanese text.',
+  'article.startAnyway': 'Start anyway',
+  'options.onlyJapanese': 'Track only Japanese content',
+  'options.onlyJapaneseHint': 'Videos need Japanese audio, captions or titles. Pages and books need Japanese text with kana.',
+  'options.trustedSites': 'Sites that always count as Japanese',
+  'options.trustedSitesNone': 'None yet. Add one from the popup when content is not detected.',
   'header.offline': 'Not connected',
   'header.toggleTheme': 'Switch light or dark theme',
   'header.dashboard': 'Dashboard',
@@ -143,6 +153,16 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  'skipped.title': 'No se registra: no se detectó japonés',
+  'skipped.trackAnyway': 'Registrar igualmente',
+  'skipped.trustSite': 'Siempre en {host}',
+  'skipped.dismiss': 'Ocultar',
+  'article.notJapanese': 'Esta página casi no tiene texto en japonés.',
+  'article.startAnyway': 'Empezar igualmente',
+  'options.onlyJapanese': 'Registrar solo contenido en japonés',
+  'options.onlyJapaneseHint': 'Los vídeos necesitan audio, subtítulos o títulos en japonés. Las páginas y los libros necesitan texto japonés con kana.',
+  'options.trustedSites': 'Sitios que siempre cuentan como japonés',
+  'options.trustedSitesNone': 'Ninguno todavía. Añade uno desde el popup cuando no se detecte el contenido.',
   'header.offline': 'Sin conexión',
   'header.toggleTheme': 'Cambiar entre tema claro y oscuro',
   'header.dashboard': 'Perfil',

@@ -8,7 +8,9 @@ export type BackgroundMessage =
   | { type: 'report'; report: TrackerReport }
   | { type: 'tracker-closed'; key: string; finish: boolean }
   | { type: 'control'; sessionId: string; action: ControlAction }
-  | { type: 'start-article'; tabId: number; mode: ArticleMode }
+  | { type: 'start-article'; tabId: number; mode: ArticleMode; force?: boolean }
+  | { type: 'allow-content'; tabId: number; key: string; trustHost?: string }
+  | { type: 'dismiss-skipped'; tabId: number; key: string }
   | { type: 'update-draft'; draft: Draft }
   | { type: 'delete-draft'; id: string }
   | { type: 'send-draft'; id: string }

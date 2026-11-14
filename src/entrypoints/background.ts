@@ -9,6 +9,7 @@ import {
   mergeDrafts,
   type InstanceCursors,
 } from '@/lib/sessions';
+import { looksJapanese } from '@/lib/japanese';
 import { readStore, updateStore, writeStore } from '@/lib/storage';
 import type { Draft, Session, TrackerReport } from '@/lib/types';
 
@@ -18,6 +19,33 @@ const CONNECT_WINDOW_MS = 15 * 60_000;
 const CURSOR_TTL_MS = 2 * 24 * 60 * 60_000;
 const SENT_TTL_MS = 3 * 24 * 60 * 60_000;
 const VIDEO_SCRIPT_ID = 'ntx-video';
+const SKIPPED_TTL_MS = 30 * 60_000;
+const ARTICLE_MIN_KANA = 30;
+
+function hostOf(url: string | undefined) {
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, '') : '';
+  } catch {
+    return '';
+  }
+}
+
+function overrideKey(tabId: number, key: string) {
+  return `${tabId}::${key}`;
+}
+
+/**
+ * Apply the language rule. Content counts when the tracker says it is Japanese,
+ * the tab title has kana for streaming video, the site is trusted, or the user allowed it.
+ */
+async function languageAllowed(report: TrackerReport, tabId: number, tabTitle: string | undefined, host: string) {
+  const settings = await readStore('settings');
+  if (!settings.onlyJapanese || report.japanese === true) return true;
+  if (report.source === 'video' && tabTitle && looksJapanese(tabTitle)) return true;
+  if (host && settings.trustedSites.includes(host)) return true;
+  const overrides = await readStore('languageOverrides');
+  return overrides.includes(overrideKey(tabId, report.key));
+}
 
 function stripUrl(url: string | undefined) {
   if (!url) return '';
@@ -109,6 +137,25 @@ async function handleReport(report: TrackerReport, sender: Browser.runtime.Messa
       session.key !== normalized.key,
   );
 
+  const host = hostOf(tab.url);
+  const hasSession = (await readStore('sessions')).some(
+    (session) => session.tabId === tabId && session.source === normalized.source && session.key === normalized.key,
+  );
+  if (!hasSession && !(await languageAllowed(normalized, tabId, tab.title, host))) {
+    // Remember the content while it plays, so the popup can offer to track it anyway.
+    if (normalized.active || normalized.activeSeconds > 0) {
+      await updateStore('skipped', (skipped) => [
+        { tabId, source: normalized.source, key: normalized.key, title: normalized.title, host, at: Date.now() },
+        ...skipped.filter((item) => item.tabId !== tabId),
+      ]);
+    }
+    return;
+  }
+  if ((await readStore('skipped')).some((item) => item.tabId === tabId)) {
+    await updateStore('skipped', (skipped) => skipped.filter((item) => item.tabId !== tabId));
+  }
+
+  // Counters are cumulative, so time measured before the verdict still counts.
   const cursors = await readStore('instanceCursors');
   await updateStore('sessions', (sessions) => {
     const index = sessions.findIndex(
@@ -146,6 +193,7 @@ async function tick() {
   await updateStore('instanceCursors', (cursors) =>
     Object.fromEntries(Object.entries(cursors).filter(([, cursor]) => now - cursor.at < CURSOR_TTL_MS)),
   );
+  await updateStore('skipped', (skipped) => skipped.filter((item) => now - item.at < SKIPPED_TTL_MS));
   await updateStore('drafts', (drafts) =>
     drafts.filter((draft) => draft.status !== 'sent' || now - draft.createdAt < SENT_TTL_MS),
   );
@@ -200,14 +248,38 @@ async function sendDraft(id: string): Promise<MessageResult<Draft>> {
 
 // ── Article timer ───────────────────────────────────────────────────────────
 
-async function startArticle(tabId: number, mode: 'page' | 'selection' | 'time') {
+async function startArticle(
+  tabId: number,
+  mode: 'page' | 'selection' | 'time',
+  force: boolean,
+): Promise<MessageResult> {
   const [probe] = await browser.scripting.executeScript({
     target: { tabId },
-    func: () => Boolean((window as { __ntxArticleStarted?: boolean }).__ntxArticleStarted),
+    func: () => {
+      // Keep this rule aligned with countKana in lib/japanese.ts.
+      const text = document.body?.innerText.slice(0, 200_000) ?? '';
+      const kana = (text.match(/[\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
+      return {
+        started: Boolean((window as { __ntxArticleStarted?: boolean }).__ntxArticleStarted),
+        kana,
+        key: location.href.split('#')[0] ?? location.href,
+        host: location.hostname.replace(/^www\./, ''),
+      };
+    },
   });
-  if (probe?.result) {
+  const result = probe?.result as { started: boolean; kana: number; key: string; host: string } | undefined;
+  if (!result) return { ok: false, error: 'tab' };
+  if (result.started) {
     await sendToTab(tabId, { type: 'tracker-control', action: 'resume' });
-    return;
+    return { ok: true };
+  }
+  const settings = await readStore('settings');
+  const trusted = settings.trustedSites.includes(result.host);
+  if (settings.onlyJapanese && !trusted && result.kana < ARTICLE_MIN_KANA) {
+    if (!force) return { ok: false, error: 'not-japanese' };
+    await updateStore('languageOverrides', (overrides) => [
+      ...new Set([...overrides, overrideKey(tabId, result.key)]),
+    ]);
   }
   await browser.scripting.executeScript({
     target: { tabId },
@@ -217,6 +289,7 @@ async function startArticle(tabId: number, mode: 'page' | 'selection' | 'time') 
     args: [mode],
   });
   await browser.scripting.executeScript({ target: { tabId }, files: ['/article.js'] });
+  return { ok: true };
 }
 
 // ── Streaming sites ─────────────────────────────────────────────────────────
@@ -363,7 +436,24 @@ async function route(
       return { ok: true };
     }
     case 'start-article':
-      await startArticle(message.tabId, message.mode);
+      return startArticle(message.tabId, message.mode, Boolean(message.force));
+    case 'allow-content': {
+      const { tabId, key, trustHost } = message;
+      if (trustHost) {
+        await updateStore('settings', (settings) => ({
+          ...settings,
+          trustedSites: [...new Set([...settings.trustedSites, trustHost])],
+        }));
+      } else {
+        await updateStore('languageOverrides', (overrides) => [...new Set([...overrides, overrideKey(tabId, key)])]);
+      }
+      await updateStore('skipped', (skipped) => skipped.filter((item) => item.tabId !== tabId));
+      return { ok: true };
+    }
+    case 'dismiss-skipped':
+      await updateStore('skipped', (skipped) =>
+        skipped.filter((item) => item.tabId !== message.tabId || item.key !== message.key),
+      );
       return { ok: true };
     case 'update-draft':
       await patchDraft(message.draft.id, () => ({
@@ -431,6 +521,10 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener((tabId) => {
     void finishSessions((session) => session.tabId === tabId);
+    void updateStore('skipped', (skipped) => skipped.filter((item) => item.tabId !== tabId));
+    void updateStore('languageOverrides', (overrides) =>
+      overrides.filter((entry) => !entry.startsWith(`${tabId}::`)),
+    );
   });
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

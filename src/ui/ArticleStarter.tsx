@@ -24,10 +24,10 @@ export function ArticleStarter({ t, hasSessionInTab }: { t: Translate; hasSessio
   const allowed = canInject(tab.url);
   const tabId = tab.id;
 
-  const start = async () => {
+  const start = async (force = false) => {
     setBusy(true);
     setError(null);
-    const result = await sendToBackground({ type: 'start-article', tabId, mode });
+    const result = await sendToBackground({ type: 'start-article', tabId, mode, force });
     setBusy(false);
     if (!result.ok) setError(result.error ?? 'error');
   };
@@ -65,7 +65,16 @@ export function ArticleStarter({ t, hasSessionInTab }: { t: Translate; hasSessio
               </button>
             ))}
           </div>
-          {error && <p className="mt-1 text-xs text-error">{error}</p>}
+          {error === 'not-japanese' ? (
+            <div className="mt-2 flex items-center gap-2">
+              <p className="flex-1 text-xs text-warning">{t('article.notJapanese')}</p>
+              <button type="button" className="btn btn-ghost btn-xs" disabled={busy} onClick={() => void start(true)}>
+                {t('article.startAnyway')}
+              </button>
+            </div>
+          ) : (
+            error && <p className="mt-1 text-xs text-error">{error}</p>
+          )}
         </>
       ) : (
         <p className="mt-1 text-xs text-base-content/60">{t('article.unavailable')}</p>

@@ -1,5 +1,5 @@
 import type { ArticleMode } from '../messages';
-import { countJapaneseCharacters } from '../japanese';
+import { countJapaneseCharacters, countKana, PAGE_MIN_KANA } from '../japanese';
 import { ActivityWindow, TrackerCore } from './core';
 
 const MAIN_SELECTORS = [
@@ -55,7 +55,13 @@ export function startArticleTracker(mode: ArticleMode) {
   const core = new TrackerCore('article', { wallClock: true });
   const activity = new ActivityWindow(core);
   const url = location.href.split('#')[0] ?? location.href;
-  core.setIdentity({ key: url, title: document.title, url, meta: { site: location.hostname } });
+  core.setIdentity({
+    key: url,
+    title: document.title,
+    url,
+    japanese: countKana(findMainContent().innerText) >= PAGE_MIN_KANA,
+    meta: { site: location.hostname },
+  });
 
   let chars = 0;
   if (mode === 'selection') {

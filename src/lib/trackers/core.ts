@@ -11,6 +11,7 @@ export interface TrackerIdentity {
   key: string;
   title: string;
   url: string;
+  japanese?: boolean;
   meta?: SessionMeta;
 }
 
@@ -163,6 +164,7 @@ export class TrackerCore {
       chars: this.chars,
       manualPause: this.manualPause,
       warning: this.warning,
+      japanese: this.identity.japanese,
       meta: this.identity.meta,
     };
     void browser.runtime.sendMessage({ type: 'report', report }).catch(() => undefined);

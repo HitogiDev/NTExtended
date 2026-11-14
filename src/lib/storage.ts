@@ -8,6 +8,19 @@ export interface StoreShape {
   pendingConnect: { tabId: number; createdAt: number } | null;
   /** Counter values of tracker instances that a finished session already used. */
   instanceCursors: Record<string, { seconds: number; chars: number; at: number }>;
+  /** Content that the language rule skipped, so the popup can offer to track it. */
+  skipped: SkippedContent[];
+  /** Content that the user allowed although it did not look Japanese, as "tabId::key". */
+  languageOverrides: string[];
+}
+
+export interface SkippedContent {
+  tabId: number;
+  source: Session['source'];
+  key: string;
+  title: string;
+  host: string;
+  at: number;
 }
 
 const DEFAULTS: StoreShape = {
@@ -16,6 +29,8 @@ const DEFAULTS: StoreShape = {
   drafts: [],
   pendingConnect: null,
   instanceCursors: {},
+  skipped: [],
+  languageOverrides: [],
 };
 
 export async function readStore<K extends keyof StoreShape>(key: K): Promise<StoreShape[K]> {

@@ -216,6 +216,44 @@ function ToggleSetting({ label, checked, onChange }: { label: string; checked: b
 function TrackingSection({ settings, t }: { settings: Settings; t: Translate }) {
   return (
     <Section title={t('options.tracking')}>
+      <div className="flex flex-col gap-1">
+        <ToggleSetting
+          label={t('options.onlyJapanese')}
+          checked={settings.onlyJapanese}
+          onChange={(value) => void save((current) => ({ ...current, onlyJapanese: value }))}
+        />
+        <p className="text-xs text-base-content/60">{t('options.onlyJapaneseHint')}</p>
+      </div>
+      {settings.onlyJapanese && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm">{t('options.trustedSites')}</span>
+          {settings.trustedSites.length === 0 ? (
+            <p className="text-xs text-base-content/60">{t('options.trustedSitesNone')}</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {settings.trustedSites.map((host) => (
+                <li key={host} className="badge badge-outline gap-1 pr-0.5">
+                  {host}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs btn-circle"
+                    title={t('options.remove')}
+                    aria-label={t('options.remove')}
+                    onClick={() =>
+                      void save((current) => ({
+                        ...current,
+                        trustedSites: current.trustedSites.filter((item) => item !== host),
+                      }))
+                    }
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <ToggleSetting
         label={t('options.trackYouTube')}
         checked={settings.trackYouTube}
