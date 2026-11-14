@@ -141,7 +141,16 @@ async function handleReport(report: TrackerReport, sender: Browser.runtime.Messa
   const hasSession = (await readStore('sessions')).some(
     (session) => session.tabId === tabId && session.source === normalized.source && session.key === normalized.key,
   );
-  if (!hasSession && !(await languageAllowed(normalized, tabId, tab.title, host))) {
+  const allowed = await languageAllowed(normalized, tabId, tab.title, host);
+  if (!allowed && hasSession && normalized.japanese === false) {
+    // The verdict can arrive after the session started, or the session can predate the rule.
+    await finishSessions(
+      (session) =>
+        session.tabId === tabId && session.source === normalized.source && session.key === normalized.key,
+      false,
+    );
+  }
+  if (!allowed && (!hasSession || normalized.japanese === false)) {
     // Remember the content while it plays, so the popup can offer to track it anyway.
     if (normalized.active || normalized.activeSeconds > 0) {
       await updateStore('skipped', (skipped) => [

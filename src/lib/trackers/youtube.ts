@@ -41,12 +41,13 @@ interface LanguageInfo {
 
 /**
  * Decide whether the video is in Japanese.
- * Automatic captions and the default audio track give the spoken language.
- * Without them, Japanese text in the title, channel or description counts.
+ * The default audio track gives the original spoken language. Videos with automatic dubbing
+ * have automatic captions for each dubbed language, so the audio track comes first.
+ * Without either, Japanese text in the title, channel or description counts.
  */
 function japaneseVerdict(info: LanguageInfo | undefined, text: string): boolean | undefined {
-  if (info?.asr) return info.asr.startsWith('ja');
   if (info?.audioDefault) return info.audioDefault.startsWith('ja');
+  if (info?.asr) return info.asr.startsWith('ja');
   if (looksJapanese(text)) return true;
   if (info?.captions.some((language) => language.startsWith('ja'))) return true;
   return info ? false : undefined;
